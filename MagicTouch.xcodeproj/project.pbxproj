@@ -414,6 +414,8 @@
 					"-F/System/Library/PrivateFrameworks",
 					"-framework",
 					MultitouchSupport,
+					"-framework",
+					IOKit,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.lollipush.MagicTouch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -453,6 +455,8 @@
 					"-F/System/Library/PrivateFrameworks",
 					"-framework",
 					MultitouchSupport,
+					"-framework",
+					IOKit,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.lollipush.MagicTouch;
 				PRODUCT_NAME = "$(TARGET_NAME)";

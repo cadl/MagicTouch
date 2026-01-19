@@ -159,23 +159,33 @@ class MultitouchManager: ObservableObject {
             if let devicePtr = CFArrayGetValueAtIndex(deviceList, i) {
                 let mutableDevicePtr = UnsafeMutableRawPointer(mutating: devicePtr)
 
-                let isOpaque = MTDeviceIsOpaqueSurface(mutableDevicePtr)
                 let isBuiltIn = MTDeviceIsBuiltIn(mutableDevicePtr)
 
-                NSLog("MagicTouch:    Device %ld: isOpaque=%@, isBuiltIn=%@", i, isOpaque ? "YES" : "NO", isBuiltIn ? "YES" : "NO")
+                // Get device info for logging and filtering
+                let deviceInfo = DeviceIdentifier.getDeviceInfo(from: mutableDevicePtr)
 
-                // Check if device is Magic Mouse
-                // Strategy: Accept non-built-in devices (external devices)
-                // Some Magic Mouse report as opaque, some don't, but they're always external (not built-in)
+                NSLog("MagicTouch:    Device %ld: isBuiltIn=%@, vendorID=0x%04X, productID=0x%04X, name=%@",
+                      i,
+                      isBuiltIn ? "YES" : "NO",
+                      deviceInfo?.vendorID ?? 0,
+                      deviceInfo?.productID ?? 0,
+                      deviceInfo?.productName ?? "Unknown")
+
+                // Only accept non-built-in devices that are Magic Mouse
                 if !isBuiltIn {
-                    NSLog("MagicTouch: ✅ Found external multitouch device (likely Magic Mouse)")
-                    devices.append(mutableDevicePtr)
+                    if let info = deviceInfo, info.isMagicMouse {
+                        NSLog("MagicTouch: ✅ Found Magic Mouse: %@", info.productName ?? "Unknown")
+                        devices.append(mutableDevicePtr)
 
-                    // Register callback
-                    MTRegisterContactFrameCallback(mutableDevicePtr, multitouchCallback)
+                        // Register callback
+                        MTRegisterContactFrameCallback(mutableDevicePtr, multitouchCallback)
 
-                    // Start device
-                    MTDeviceStart(mutableDevicePtr, 0)
+                        // Start device
+                        MTDeviceStart(mutableDevicePtr, 0)
+                    } else {
+                        NSLog("MagicTouch: ⏭️  Skipping non-Magic Mouse device: %@",
+                              deviceInfo?.productName ?? "Unknown (vendorID=0x\(String(format: "%04X", deviceInfo?.vendorID ?? 0)))")
+                    }
                 }
             }
         }

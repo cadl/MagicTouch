@@ -67,6 +67,9 @@ void MTDeviceStop(void *device);
 bool MTDeviceIsOpaqueSurface(void *device);
 bool MTDeviceIsBuiltIn(void *device);
 
+// Device information
+io_service_t MTDeviceGetService(void *device);
+
 #ifdef __cplusplus
 }
 #endif
