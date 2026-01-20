@@ -1,0 +1,71 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "MagicTouch"
+          }
+        }
+      }
+    },
+    "NSAccessibilityUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MagicTouch needs accessibility permission to simulate mouse clicks when you tap on the Magic Mouse."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MagicTouch necesita permiso de accesibilidad para simular clics del ratón cuando toca en el Magic Mouse."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MagicTouch a besoin de la permission d'accessibilité pour simuler des clics de souris lorsque vous touchez la Magic Mouse."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MagicTouch は Magic Mouse をタップしたときにマウスクリックをシミュレートするために、アクセシビリティ権限が必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MagicTouch는 Magic Mouse를 탭할 때 마우스 클릭을 시뮬레이션하기 위해 손쉬운 사용 권한이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MagicTouch 需要辅助功能权限，以便在您轻点 Magic Mouse 时模拟鼠标点按。"
+          }
+        }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "comment" : "Copyright (human-readable)",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : ""
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

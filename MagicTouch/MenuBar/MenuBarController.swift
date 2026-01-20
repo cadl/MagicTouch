@@ -50,16 +50,16 @@ class MenuBarController {
     func updateMenu() {
         let menu = NSMenu()
 
-        // App title
-        let titleItem = NSMenuItem(title: "MagicTouch", action: nil, keyEquivalent: "")
-        titleItem.isEnabled = false
-        menu.addItem(titleItem)
+        // Show main window
+        let showItem = NSMenuItem(title: String(localized: "menu.show"), action: #selector(showSettings), keyEquivalent: "")
+        showItem.target = self
+        menu.addItem(showItem)
 
         menu.addItem(NSMenuItem.separator())
 
         // Enable/Disable toggle
         let enableItem = NSMenuItem(
-            title: settings.isEnabled ? "Disable Tap-to-Click" : "Enable Tap-to-Click",
+            title: String(localized: settings.isEnabled ? "menu.disable" : "menu.enable"),
             action: #selector(toggleEnabled),
             keyEquivalent: "e"
         )
@@ -69,16 +69,28 @@ class MenuBarController {
         menu.addItem(NSMenuItem.separator())
 
         // Status items
+        let mouseStatusText: String
+        if multitouchManager.magicMouseConnected {
+            mouseStatusText = "✓ " + String(localized: "menu.status.mouseConnected")
+        } else {
+            mouseStatusText = "✗ " + String(localized: "menu.status.mouseNotFound")
+        }
         let mouseStatus = NSMenuItem(
-            title: multitouchManager.magicMouseConnected ? "✓ Magic Mouse Connected" : "✗ Magic Mouse Not Found",
+            title: mouseStatusText,
             action: nil,
             keyEquivalent: ""
         )
         mouseStatus.isEnabled = false
         menu.addItem(mouseStatus)
 
+        let permissionStatusText: String
+        if permissionManager.hasAccessibilityPermission {
+            permissionStatusText = "✓ " + String(localized: "menu.status.permissionGranted")
+        } else {
+            permissionStatusText = "✗ " + String(localized: "menu.status.permissionRequired")
+        }
         let permissionStatus = NSMenuItem(
-            title: permissionManager.hasAccessibilityPermission ? "✓ Accessibility Permission" : "✗ Accessibility Permission Required",
+            title: permissionStatusText,
             action: permissionManager.hasAccessibilityPermission ? nil : #selector(requestPermission),
             keyEquivalent: ""
         )
@@ -87,15 +99,8 @@ class MenuBarController {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Open settings
-        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        menu.addItem(NSMenuItem.separator())
-
         // Quit
-        let quitItem = NSMenuItem(title: "Quit MagicTouch", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: String(localized: "menu.quit"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 

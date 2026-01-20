@@ -8,7 +8,7 @@
 import Cocoa
 import ApplicationServices
 
-enum MouseClickType {
+enum MouseClickType: Sendable {
     case left
     case right
 }
@@ -142,8 +142,14 @@ class ClickSimulator {
             mouseUp.post(tap: .cghidEventTap)
 
             // Log for debugging
+            let typeLabel: String = switch type {
+            case .left:
+                "left"
+            case .right:
+                "right"
+            }
             NSLog("ClickSimulator: Posted %@ click (state=%lld) at (%.0f, %.0f)",
-                  type == .left ? "left" : "right", clickState, position.x, position.y)
+                  typeLabel, clickState, position.x, position.y)
         }
     }
 
