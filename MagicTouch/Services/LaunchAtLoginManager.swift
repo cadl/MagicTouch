@@ -24,45 +24,45 @@ class LaunchAtLoginManager {
     @discardableResult
     func setLaunchAtLogin(enabled: Bool) -> Bool {
         if #available(macOS 13.0, *) {
-            print("SMAppService current status: \(SMAppService.mainApp.status.rawValue)")
+            Logger.info("SMAppService current status: \(SMAppService.mainApp.status.rawValue)", category: Logger.settings)
             do {
                 if enabled {
                     if SMAppService.mainApp.status == .notRegistered {
                         try SMAppService.mainApp.register()
-                        print("✓ Launch at login enabled successfully")
+                        Logger.info("✓ Launch at login enabled successfully", category: Logger.settings)
                         return true
                     } else if SMAppService.mainApp.status == .enabled {
-                        print("Launch at login already enabled")
+                        Logger.info("Launch at login already enabled", category: Logger.settings)
                         return true
                     } else if SMAppService.mainApp.status == .requiresApproval {
-                        print("⚠️ Launch at login requires user approval in System Settings")
+                        Logger.info("⚠️ Launch at login requires user approval in System Settings", category: Logger.settings)
                         // Open System Settings to Login Items
                         if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
                             NSWorkspace.shared.open(url)
                         }
                         return false
                     } else {
-                        print("Launch at login status: \(SMAppService.mainApp.status.rawValue)")
+                        Logger.info("Launch at login status: \(SMAppService.mainApp.status.rawValue)", category: Logger.settings)
                         return false
                     }
                 } else {
                     if SMAppService.mainApp.status == .enabled {
                         try SMAppService.mainApp.unregister()
-                        print("✓ Launch at login disabled successfully")
+                        Logger.info("✓ Launch at login disabled successfully", category: Logger.settings)
                         return true
                     } else {
-                        print("Launch at login already disabled")
+                        Logger.info("Launch at login already disabled", category: Logger.settings)
                         return true
                     }
                 }
             } catch {
-                print("❌ Failed to set launch at login: \(error.localizedDescription)")
-                print("Error details: \(error)")
+                Logger.error("❌ Failed to set launch at login: \(error.localizedDescription)", category: Logger.settings)
+                Logger.error("Error details: \(error)", category: Logger.settings)
                 return false
             }
         } else {
             // Fallback for older macOS versions
-            print("Launch at login requires macOS 13.0+")
+            Logger.info("Launch at login requires macOS 13.0+", category: Logger.settings)
             return false
         }
     }

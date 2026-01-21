@@ -58,75 +58,15 @@ class MultitouchManager: ObservableObject {
 
     private var devices: [UnsafeMutableRawPointer] = []
     private var pendingRestartWorkItem: DispatchWorkItem?
-    private static let fixedTapTimeThreshold: TimeInterval = 0.25 // seconds
-    private static let fixedTapMovementThreshold: Float = 0.08 // normalized units
     private var tapDetector = TapDetector(
-        tapTimeThreshold: MultitouchManager.fixedTapTimeThreshold,
-        tapMovementThreshold: MultitouchManager.fixedTapMovementThreshold
+        tapTimeThreshold: TouchConfiguration.tapTimeThreshold,
+        tapMovementThreshold: TouchConfiguration.tapMovementThreshold
     )
+    private var clickSequenceTracker = ClickSequenceTracker()
     private var cursorPositionAtTouchStart: CGPoint?
     private var touchStartPosition: MTPoint?
-    private var surfaceMovementThreshold: Float = 0.15 // Threshold to distinguish tap from scroll
-    private var scrollDetectionThreshold: Float = 0.2 // Larger movement = scrolling
-    private var scrollVelocityThreshold: Float = 15.0 // High instantaneous velocity likely indicates a scroll flick
     private var lastScrollLikeTime: TimeInterval = 0
-    private let scrollSuppressTapWindow: TimeInterval = 0.02
-    private let scrollSuppressTapMaxTapDuration: TimeInterval = 0.02
     private var currentTouchStartTimestamp: TimeInterval?
-
-    // Multi-click tracking:
-    // - Uses system double-click interval (user preference)
-    // - Uses touch surface position and mouse button
-    private var lastClickTime: TimeInterval = 0
-    private var lastClickSurfacePosition: MTPoint?
-    private var lastClickType: MouseClickType?
-    private var clickSequenceCount: Int64 = 0
-
-    // Multi-click threshold (only use surface position)
-    private let multiClickSurfaceThreshold: Float = 0.2  // Touch surface distance (normalized) - 20%
-
-    // Smart reset mechanism to avoid breaking click sequences on minor scrolls
-    private let clickSequenceGracePeriod: TimeInterval = 0.1  // 100ms grace period
-    private var pendingResetTime: TimeInterval?
-
-    /// Request to reset click sequence (with grace period)
-    private func requestResetClickSequence() {
-        pendingResetTime = ProcessInfo.processInfo.systemUptime
-        NSLog("MagicTouch: Click sequence reset requested (grace period: %.0fms)", clickSequenceGracePeriod * 1000)
-    }
-
-    /// Check and execute pending reset if grace period has expired
-    private func checkPendingReset() {
-        guard let pendingTime = pendingResetTime else { return }
-
-        let now = ProcessInfo.processInfo.systemUptime
-        if now - pendingTime > clickSequenceGracePeriod {
-            NSLog("MagicTouch: Grace period expired - executing click sequence reset")
-            actuallyResetClickSequence()
-        }
-    }
-
-    /// Actually reset click sequence (internal use only)
-    private func actuallyResetClickSequence() {
-        lastClickTime = 0
-        lastClickSurfacePosition = nil
-        lastClickType = nil
-        clickSequenceCount = 0
-        pendingResetTime = nil
-    }
-
-    /// Cancel pending reset (because user clicked)
-    private func cancelPendingReset() {
-        if pendingResetTime != nil {
-            NSLog("MagicTouch: Pending reset cancelled - user clicked during grace period")
-            pendingResetTime = nil
-        }
-    }
-
-    /// Legacy method for immediate reset (backward compatibility)
-    private func resetClickSequence() {
-        actuallyResetClickSequence()
-    }
 
     // Settings
     private var isEnabled = true
@@ -243,7 +183,7 @@ class MultitouchManager: ObservableObject {
         cursorPositionAtTouchStart = nil
         touchStartPosition = nil
         lastScrollLikeTime = 0
-        resetClickSequence()
+        clickSequenceTracker.reset()
         currentTouchStartTimestamp = nil
 
         NSLog("MagicTouch: MultitouchManager stopped")
@@ -257,7 +197,7 @@ class MultitouchManager: ObservableObject {
 
         if wasEnabled && !enabled {
             lastScrollLikeTime = ProcessInfo.processInfo.systemUptime
-            requestResetClickSequence()
+            clickSequenceTracker.requestReset()
             tapDetector.reset()
             cursorPositionAtTouchStart = nil
             touchStartPosition = nil
@@ -280,7 +220,7 @@ class MultitouchManager: ObservableObject {
         guard isEnabled else { return }
 
         // Check for pending reset
-        checkPendingReset()
+        clickSequenceTracker.checkPendingReset()
 
         if touches.isEmpty {
             // No touches - evaluate if we had a tap
@@ -292,12 +232,12 @@ class MultitouchManager: ObservableObject {
                 // When the frame has 0 touches, use TapDetector's last observed position.
                 if let tapPosition = tapDetector.touchEnded(timestamp: timestamp) {
                     let now = ProcessInfo.processInfo.systemUptime
-                    if now - lastScrollLikeTime <= scrollSuppressTapWindow {
+                    if now - lastScrollLikeTime <= TouchConfiguration.scrollSuppressTapWindow {
                         let duration = timestamp - (currentTouchStartTimestamp ?? timestamp)
-                        if duration <= scrollSuppressTapMaxTapDuration {
+                        if duration <= TouchConfiguration.scrollSuppressTapMaxDuration {
                             NSLog("MagicTouch: [NO-TAP] Suppressed due to recent scroll (%.0fms) + short tap (%.0fms)",
                                   (now - lastScrollLikeTime) * 1000.0, duration * 1000.0)
-                            requestResetClickSequence()  // Use request instead of immediate reset
+                            clickSequenceTracker.requestReset()
                         } else {
                             handleTap(at: tapPosition)
                         }
@@ -341,11 +281,10 @@ class MultitouchManager: ObservableObject {
                     let dy = currentCursorPos.y - startCursorPos.y
                     let cursorDistance = sqrt(dx * dx + dy * dy)
 
-                    // Relaxed cursor movement threshold to 5.0 pixels
-                    if cursorDistance > 5.0 {
+                    if cursorDistance > TouchConfiguration.cursorMovementThreshold {
                         NSLog("MagicTouch: [SCROLL] Cursor movement detected (%.1fpx); cancelling", cursorDistance)
                         lastScrollLikeTime = ProcessInfo.processInfo.systemUptime
-                        requestResetClickSequence()
+                        clickSequenceTracker.requestReset()
                         tapDetector.reset()
                         cursorPositionAtTouchStart = nil
                         touchStartPosition = nil
@@ -357,7 +296,7 @@ class MultitouchManager: ObservableObject {
             // Multiple touches - cancel tap detection
             NSLog("MagicTouch: [CANCEL] Multi-touch detected; cancelling")
             lastScrollLikeTime = ProcessInfo.processInfo.systemUptime
-            requestResetClickSequence()
+            clickSequenceTracker.requestReset()
             tapDetector.reset()
             cursorPositionAtTouchStart = nil
             touchStartPosition = nil
@@ -366,12 +305,6 @@ class MultitouchManager: ObservableObject {
     }
 
     private func handleTap(at position: MTPoint) {
-        // Cancel any pending reset since user is clicking
-        cancelPendingReset()
-
-        // Use monotonic time to match how multi-click is typically tracked (avoids wall-clock adjustments).
-        let currentTime = ProcessInfo.processInfo.systemUptime
-
         // Determine click type based on touch position and mode
         let clickType: MouseClickType = switch clickMode {
         case .leftRight:
@@ -381,46 +314,10 @@ class MultitouchManager: ObservableObject {
             .left
         }
 
-        // Multi-click detection using ONLY touch surface position
-        let maxInterval = NSEvent.doubleClickInterval
+        // Process click and get click state (1=single, 2=double, 3=triple)
+        let clickState = clickSequenceTracker.processClick(at: position, type: clickType)
 
-        var clickState: Int64 = 1
-        if let lastSurfacePos = lastClickSurfacePosition,
-           let lastType = lastClickType {
-
-            let timeSinceLastClick = currentTime - lastClickTime
-
-            // Check time and type constraints
-            if timeSinceLastClick <= maxInterval && clickType == lastType {
-                // Only check touch surface position distance
-                let surfaceDx = position.x - lastSurfacePos.x
-                let surfaceDy = position.y - lastSurfacePos.y
-                let surfaceDistance = sqrtf(surfaceDx * surfaceDx + surfaceDy * surfaceDy)
-
-                if surfaceDistance <= multiClickSurfaceThreshold {
-                    // Limit clickState to maximum 3 (single, double, triple)
-                    // macOS doesn't recognize clickState > 3
-                    if clickSequenceCount >= 3 {
-                        clickState = 1  // Reset after triple-click
-                        NSLog("MagicTouch: Multi-click sequence reset after triple-click")
-                    } else {
-                        clickState = clickSequenceCount + 1
-                    }
-                    NSLog("MagicTouch: Multi-click accepted - surfaceDist=%.3f <= %.3f",
-                          surfaceDistance, multiClickSurfaceThreshold)
-                } else {
-                    NSLog("MagicTouch: Multi-click rejected - surfaceDist=%.3f > %.3f",
-                          surfaceDistance, multiClickSurfaceThreshold)
-                }
-            }
-        }
-
-        // Update click sequence tracking (no longer save cursor position)
-        lastClickTime = currentTime
-        lastClickSurfacePosition = position
-        lastClickType = clickType
-        clickSequenceCount = clickState
-
+        // Log the click
         let clickLabel: String = switch clickType {
         case .left:
             "LEFT"
@@ -447,11 +344,4 @@ class MultitouchManager: ObservableObject {
         stop()
         globalManagerInstance = nil
     }
-}
-
-// MARK: - Click Mode
-
-enum ClickMode {
-    case leftRight // Left side = left click, right side = right click
-    case leftOnly  // Any tap = left click
 }

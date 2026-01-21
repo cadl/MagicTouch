@@ -8,11 +8,6 @@
 import Cocoa
 import ApplicationServices
 
-enum MouseClickType: Sendable {
-    case left
-    case right
-}
-
 class ClickSimulator {
 
     // MARK: - Menu Tracking

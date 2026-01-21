@@ -7,48 +7,6 @@
 
 import SwiftUI
 
-// MARK: - Helper Components
-
-struct SettingsSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-
-            VStack(alignment: .leading, spacing: 0) {
-                content
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(NSColor.separatorColor).opacity(0.16))
-            .cornerRadius(10)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                    .opacity(0.35)
-            )
-        }
-    }
-}
-
-struct SettingsRow<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        HStack {
-            content
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - ContentView
-
 struct ContentView: View {
 
     @StateObject private var settings = SettingsManager.shared
@@ -101,14 +59,14 @@ struct ContentView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .onChange(of: settings.launchAtLogin) { oldValue, newValue in
-                                print("Toggle changed to: \(newValue)")
+                                Logger.debug("Toggle changed to: \(newValue)", category: Logger.settings)
                                 let success = LaunchAtLoginManager.shared.setLaunchAtLogin(enabled: newValue)
-                                print("setLaunchAtLogin returned: \(success)")
+                                Logger.debug("setLaunchAtLogin returned: \(success)", category: Logger.settings)
 
                                 // Check actual status after setting
                                 if #available(macOS 13.0, *) {
                                     let actualStatus = LaunchAtLoginManager.shared.isEnabled()
-                                    print("Actual launch at login status: \(actualStatus)")
+                                    Logger.debug("Actual launch at login status: \(actualStatus)", category: Logger.settings)
                                 }
 
                                 if !success && newValue {
@@ -164,7 +122,7 @@ struct ContentView: View {
                                 .foregroundColor(.orange)
 
                             Button(String(localized: "settings.restartNow")) {
-                                restartApp()
+                                AppLifecycleManager.shared.restartApp()
                             }
                             .buttonStyle(.link)
                             .controlSize(.small)
@@ -177,31 +135,20 @@ struct ContentView: View {
 
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(multitouchManager.magicMouseConnected ? Color.green : Color.red)
-                            .frame(width: 10, height: 10)
-                        Text(String(localized: multitouchManager.magicMouseConnected ? "status.mouse.connected" : "status.mouse.notConnected"))
-                            .font(.callout)
-                    }
+                    StatusIndicator(
+                        isConnected: multitouchManager.magicMouseConnected,
+                        connectedText: "status.mouse.connected",
+                        disconnectedText: "status.mouse.notConnected"
+                    )
 
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(permissionManager.hasAccessibilityPermission ? Color.green : Color.red)
-                            .frame(width: 10, height: 10)
-
-                        if permissionManager.hasAccessibilityPermission {
-                            Text(String(localized: "status.permission.ok"))
-                                .font(.callout)
-                        } else {
-                            Button(String(localized: "status.permission.grant")) {
-                                permissionManager.requestPermission()
-                            }
-                            .buttonStyle(.link)
-                            .controlSize(.small)
-                            .font(.callout)
+                    StatusIndicator(
+                        isConnected: permissionManager.hasAccessibilityPermission,
+                        connectedText: "status.permission.ok",
+                        disconnectedText: "status.permission.grant",
+                        action: {
+                            permissionManager.requestPermission()
                         }
-                    }
+                    )
                 }
 
                 Spacer()
@@ -255,29 +202,6 @@ struct ContentView: View {
             enabled: settings.isEnabled,
             clickMode: settings.clickMode
         )
-    }
-
-    private func restartApp() {
-        let appPath = Bundle.main.bundleURL.path
-        let relaunchScript = """
-        #!/bin/bash
-        sleep 0.5
-        open "\(appPath)"
-        """
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = ["-c", relaunchScript]
-
-        do {
-            try task.run()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                NSApplication.shared.terminate(nil)
-            }
-        } catch {
-            print("Failed to restart app: \(error)")
-            NSApplication.shared.terminate(nil)
-        }
     }
 }
 
