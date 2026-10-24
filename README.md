@@ -8,7 +8,7 @@ MagicTouch is a macOS menu bar app that turns light taps on an Apple Magic Mouse
 
 <p align="center">
   <a href="docs/images/settings-en.png">
-    <img src="docs/images/macbook-preview.png" width="960" alt="MagicTouch running inside a MacBook-style presentation frame">
+    <img src="docs/images/macbook-preview.png" width="960" alt="MagicTouch on a macOS desktop with Mojave wallpaper, menu bar, and Dock, inside a MacBook frame">
   </a>
 </p>
 
