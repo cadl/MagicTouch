@@ -33,10 +33,12 @@
 
 ## Commit & Pull Request Guidelines
 
-- Git history is minimal (currently only “Initial Commit”); use short, imperative subjects (e.g., `Fix menu refresh on permission change`).
+- Use short, imperative English subjects (e.g., `Fix menu refresh on permission change`).
 - PRs should include: purpose/summary, steps to verify, and screenshots for UI/menu bar changes.
 - Before opening a PR: run `xcodebuild test …` and avoid committing generated files (e.g., `DerivedData/`).
 
 ## Security & Configuration Tips
 
 - This app relies on macOS Accessibility permission for click simulation; document any new permission requirements and keep prompts user-friendly.
+
+- Keep personal signing configuration and credentials out of Git; see `BUILD_GUIDE.md`.
