@@ -54,17 +54,21 @@ class ClickSimulator {
 
     // MARK: - Public Methods
 
+    static func isMenuTrackingActive() -> Bool {
+        menuTrackingDepth > 0
+    }
+
     /// Simulate a mouse click at the current cursor position
-    static func simulateClick(type: MouseClickType, clickState: Int64 = 1) {
+    static func simulateClick(type: MouseClickType, clickState: Int64 = 1, shouldPost: @escaping () -> Bool = { true }) {
         guard let currentPosition = CGEvent(source: nil)?.location else {
             NSLog("ClickSimulator: ❌ Failed to read current cursor location")
             return
         }
-        simulateClick(type: type, at: currentPosition, clickState: clickState)
+        simulateClick(type: type, at: currentPosition, clickState: clickState, shouldPost: shouldPost)
     }
 
     /// Simulate a mouse click at a specific position
-    static func simulateClick(type: MouseClickType, at position: CGPoint, clickState: Int64 = 1) {
+    static func simulateClick(type: MouseClickType, at position: CGPoint, clickState: Int64 = 1, shouldPost: @escaping () -> Bool = { true }) {
         // If menu tracking got stuck (missed end notification), don't permanently force AX clicks.
         // Also, a tracked menu implies our app is active; if we're not active, clear the state.
         if menuTrackingDepth > 0 && !NSApp.isActive {
@@ -99,10 +103,12 @@ class ClickSimulator {
         }
 
         clickQueue.async {
-            if shouldUseAccessibilityClick {
-                NSLog("ClickSimulator: Menu active, using Accessibility click")
-                performAccessibilityClick(at: position)
-                return
+            guard shouldPost() else { return }
+            if shouldUseAccessibilityClick && type == .left {
+                // AXPress is only a left-button action. If the hit element cannot
+                // be pressed (e.g. outside the menu), send a normal click instead.
+                if performAccessibilityClick(at: position) { return }
+                guard shouldPost() else { return }
             }
 
             // Create mouse down event
@@ -151,7 +157,7 @@ class ClickSimulator {
     // MARK: - Accessibility Click
 
     /// Perform click using Accessibility API (works during modal loops)
-    private static func performAccessibilityClick(at screenPoint: CGPoint) {
+    private static func performAccessibilityClick(at screenPoint: CGPoint) -> Bool {
         let systemWide = AXUIElementCreateSystemWide()
         var element: AXUIElement?
 
@@ -167,10 +173,12 @@ class ClickSimulator {
             // Perform press action on the element
             let actionResult = AXUIElementPerformAction(element, kAXPressAction as CFString)
             NSLog("ClickSimulator: Accessibility click result: %d", actionResult.rawValue)
+            return actionResult == .success
         } else {
             NSLog("ClickSimulator: Could not find element at position (%.0f, %.0f), result: %d",
                   screenPoint.x, screenPoint.y, result.rawValue)
         }
+        return false
     }
 
     /// Check if we have permission to post events

@@ -15,8 +15,8 @@ struct MagicTouchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Settings window
-        WindowGroup(id: "settings") {
+        // Settings window (single window only)
+        Window("MagicTouch", id: "settings") {
             ContentView()
         }
         .windowStyle(.hiddenTitleBar)
@@ -36,8 +36,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
     private var permissionCancellable: AnyCancellable?
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single-instance check (defensive, LSMultipleInstancesProhibited should prevent this)
+        if let bundleId = Bundle.main.bundleIdentifier {
+            let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+            if runningApps.count > 1 {
+                NSLog("MagicTouch: ⚠️ Another instance detected, activating it and terminating self")
+
+                // Find and activate the other instance
+                if let existingApp = runningApps.first(where: { $0 != NSRunningApplication.current }) {
+                    existingApp.activate()
+                }
+
+                // Terminate this instance
+                DispatchQueue.main.async {
+                    NSApp.terminate(nil)
+                }
+                return
+            }
+        }
+
         multitouchManager.updateSettings(enabled: settings.isEnabled, clickMode: settings.clickMode)
 
         // Setup menu bar
@@ -63,6 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Monitor permission changes
         permissionCancellable = permissionManager.$hasAccessibilityPermission
+            .removeDuplicates()
             .sink { [weak self] hasPermission in
                 if hasPermission {
                     self?.multitouchManager.start()
@@ -74,6 +95,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.menuBarController?.updateMenu()
                 }
             }
+
+        // Show settings on first launch or if permission is needed
+        let isFirstLaunch = !UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
+        if isFirstLaunch || !permissionManager.hasAccessibilityPermission {
+            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.showSettingsWindow()
+            }
+        } else {
+            // Not first launch and has permission - hide from Dock
+            hideFromDock()
+        }
+
+        // Capture settings window reference after it's created
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.captureSettingsWindow()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -84,20 +122,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         multitouchManager.stop()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NSLog("MagicTouch: 🔄 Application reopen requested")
+        if !flag {
+            showSettingsWindow()
+        }
+        return true
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Menu bar app: closing the window should not terminate the app
+        NSLog("MagicTouch: 🚫 Window closed, but app continues running in menu bar")
+        return false
+    }
+
+    // MARK: - Dock Icon Management
+
+    // Show Dock icon
+    private func showInDock() {
+        NSApp.setActivationPolicy(.regular)
+    }
+
+    // Hide Dock icon
+    private func hideFromDock() {
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - Window Management
+
     // Show settings window
     private func showSettingsWindow() {
-        // Activate the app
-        NSApp.activate(ignoringOtherApps: true)
+        // Show Dock icon when window opens
+        showInDock()
 
-        // Find and show settings window, or create a new one
+        // Wait for activation policy to take effect
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+
+            // Activate the app
+            NSApp.activate(ignoringOtherApps: true)
+
+            // If we have a cached window reference, show it
+            if let window = self.settingsWindow {
+                window.makeKeyAndOrderFront(nil)
+                return
+            }
+
+            // Otherwise, find and show settings window
+            let windows = NSApp.windows.filter { !$0.isSheet }
+            if let window = windows.first {
+                self.settingsWindow = window
+                window.delegate = self
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+
+    // Capture settings window reference
+    private func captureSettingsWindow() {
         let windows = NSApp.windows.filter { !$0.isSheet }
         if let window = windows.first {
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            // If no window exists, create a new one by opening the URL
-            if let url = URL(string: "magictouch://settings") {
-                NSWorkspace.shared.open(url)
-            }
+            settingsWindow = window
+            window.delegate = self
         }
     }
 
@@ -108,7 +194,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self else { return }
                 NSLog("MagicTouch: 💤 System will sleep; stopping multitouch monitoring")
-                self.multitouchManager.stop()
+                self.multitouchManager.suspend()
             }
         )
 
@@ -116,8 +202,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self else { return }
                 NSLog("MagicTouch: 🌅 System did wake; restarting multitouch monitoring")
-                guard self.permissionManager.hasAccessibilityPermission else { return }
-                self.multitouchManager.restart(reason: "systemDidWake")
+                self.multitouchManager.resume()
             }
         )
 
@@ -136,5 +221,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.multitouchManager.restart(reason: "screensDidWake", initialDelay: 0.5)
             }
         )
+    }
+}
+
+// MARK: - NSWindowDelegate
+
+extension AppDelegate: NSWindowDelegate {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if sender == settingsWindow {
+            // Hide the window instead of closing it
+            sender.orderOut(nil)
+            // Hide Dock icon when window closes
+            hideFromDock()
+            return false
+        }
+        return true
     }
 }

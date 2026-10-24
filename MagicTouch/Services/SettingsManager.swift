@@ -64,7 +64,7 @@ class SettingsManager: ObservableObject {
         self.isEnabled = UserDefaults.standard.object(forKey: Keys.isEnabled) as? Bool ?? Defaults.isEnabled
         let isLeftRight = UserDefaults.standard.object(forKey: Keys.clickMode) as? Bool ?? true
         self.clickMode = isLeftRight ? .leftRight : .leftOnly
-        self.launchAtLogin = UserDefaults.standard.object(forKey: Keys.launchAtLogin) as? Bool ?? Defaults.launchAtLogin
+        self.launchAtLogin = LaunchAtLoginManager.shared.isEnabled()
 
         // Load language preference
         if let languageString = UserDefaults.standard.string(forKey: Keys.selectedLanguage),

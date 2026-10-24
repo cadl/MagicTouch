@@ -13,6 +13,7 @@ struct ContentView: View {
     @ObservedObject private var multitouchManager = MultitouchManager.shared
     @StateObject private var permissionManager = PermissionManager.shared
     @State private var showLaunchAtLoginAlert = false
+    @State private var showMoveToApplicationsAlert = false
     @State private var showRestartAlert = false
 
     var body: some View {
@@ -55,28 +56,12 @@ struct ContentView: View {
                     SettingsRow {
                         Text(String(localized: "main.toggle.launchAtLogin"))
                         Spacer()
-                        Toggle("", isOn: $settings.launchAtLogin)
+                        Toggle("", isOn: Binding(
+                            get: { settings.launchAtLogin },
+                            set: { setLaunchAtLogin($0) }
+                        ))
                             .toggleStyle(.switch)
                             .labelsHidden()
-                            .onChange(of: settings.launchAtLogin) { oldValue, newValue in
-                                Logger.debug("Toggle changed to: \(newValue)", category: Logger.settings)
-                                let success = LaunchAtLoginManager.shared.setLaunchAtLogin(enabled: newValue)
-                                Logger.debug("setLaunchAtLogin returned: \(success)", category: Logger.settings)
-
-                                // Check actual status after setting
-                                if #available(macOS 13.0, *) {
-                                    let actualStatus = LaunchAtLoginManager.shared.isEnabled()
-                                    Logger.debug("Actual launch at login status: \(actualStatus)", category: Logger.settings)
-                                }
-
-                                if !success && newValue {
-                                    // If setting failed, revert the toggle
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        settings.launchAtLogin = false
-                                        showLaunchAtLoginAlert = true
-                                    }
-                                }
-                            }
                     }
                 }
 
@@ -138,7 +123,8 @@ struct ContentView: View {
                     StatusIndicator(
                         isConnected: multitouchManager.magicMouseConnected,
                         connectedText: "status.mouse.connected",
-                        disconnectedText: "status.mouse.notConnected"
+                        disconnectedText: "status.mouse.notConnected",
+                        detailText: multitouchManager.connectedDeviceInfo.map { "\($0.modelName), \($0.connectionType)" }
                     )
 
                     StatusIndicator(
@@ -159,7 +145,8 @@ struct ContentView: View {
                     }
 
                     Button(String(localized: "main.button.minimizeToTray")) {
-                        NSApp.keyWindow?.close()
+                        NSApp.keyWindow?.orderOut(nil)
+                        NSApp.setActivationPolicy(.accessory)
                     }
                 }
             }
@@ -177,7 +164,19 @@ struct ContentView: View {
         } message: {
             Text(String(localized: "alert.launchAtLogin.message"))
         }
+        .alert(String(localized: "alert.moveToApplications.title"), isPresented: $showMoveToApplicationsAlert) {
+            Button(String(localized: "alert.moveToApplications.openFinder")) {
+                NSWorkspace.shared.selectFile(Bundle.main.bundlePath, inFileViewerRootedAtPath: "")
+            }
+            Button(String(localized: "alert.launchAtLogin.cancel"), role: .cancel) { }
+        } message: {
+            Text(String(localized: "alert.moveToApplications.message"))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            settings.launchAtLogin = LaunchAtLoginManager.shared.isEnabled()
+        }
         .onAppear {
+            settings.launchAtLogin = LaunchAtLoginManager.shared.isEnabled()
             updateMultitouchSettings()
             // Start multitouch monitoring if permission is granted
             if permissionManager.hasAccessibilityPermission {
@@ -195,6 +194,18 @@ struct ContentView: View {
         .onChange(of: settings.selectedLanguage) { _, _ in
             showRestartAlert = true
         }
+    }
+
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        let manager = LaunchAtLoginManager.shared
+        if enabled && !manager.isAppInApplicationsFolder() {
+            settings.launchAtLogin = manager.isEnabled()
+            showMoveToApplicationsAlert = true
+            return
+        }
+        let success = manager.setLaunchAtLogin(enabled: enabled)
+        settings.launchAtLogin = manager.isEnabled()
+        if !success { showLaunchAtLoginAlert = true }
     }
 
     private func updateMultitouchSettings() {

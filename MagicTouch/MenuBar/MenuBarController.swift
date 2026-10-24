@@ -7,12 +7,14 @@
 
 import Cocoa
 import SwiftUI
+import Combine
 
 class MenuBarController {
 
     // MARK: - Properties
 
     private var statusItem: NSStatusItem?
+    private var menuUpdates: AnyCancellable?
     private var settings: SettingsManager
     private var multitouchManager: MultitouchManager
     private var permissionManager: PermissionManager
@@ -43,7 +45,13 @@ class MenuBarController {
             button.toolTip = "MagicTouch"
         }
 
-        // Create menu
+        // Published values emit before assignment; refresh on the next main queue turn.
+        menuUpdates = Publishers.CombineLatest4(
+            settings.$isEnabled, multitouchManager.$magicMouseConnected,
+            multitouchManager.$connectedDeviceInfo, permissionManager.$hasAccessibilityPermission.removeDuplicates()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in self?.updateMenu() }
         updateMenu()
     }
 
@@ -71,7 +79,11 @@ class MenuBarController {
         // Status items
         let mouseStatusText: String
         if multitouchManager.magicMouseConnected {
-            mouseStatusText = "✓ " + String(localized: "menu.status.mouseConnected")
+            var text = "✓ " + String(localized: "menu.status.mouseConnected")
+            if let deviceInfo = multitouchManager.connectedDeviceInfo {
+                text += " (\(deviceInfo.modelName), \(deviceInfo.connectionType))"
+            }
+            mouseStatusText = text
         } else {
             mouseStatusText = "✗ " + String(localized: "menu.status.mouseNotFound")
         }

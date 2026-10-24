@@ -22,20 +22,24 @@ private func multitouchCallback(
     timestamp: Double,
     frame: Int32
 ) -> Int32 {
-    guard let manager = globalManagerInstance,
-          let touchData = data else {
+    guard let manager = globalManagerInstance else {
         return 0
     }
 
-    // Convert C array to Swift array
-    var touches: [MTTouch] = []
-    for i in 0..<Int(numFingers) {
-        touches.append(touchData[i])
+    // 在状态队列同步检查是否可以处理，并把回调计入 drain group，
+    // 以便 stop() 能等待所有正在执行的回调退出后再释放设备对象。
+    let generation = manager.stateQueue.sync { () -> UInt64? in
+        guard manager.session.isRunning else { return nil }
+        manager.callbackDrainGroup.enter()
+        return manager.session.generation
     }
 
-    // Process touches on main thread
-    DispatchQueue.main.async {
-        manager.processTouches(touches, timestamp: timestamp)
+    guard let generation else { return 0 }
+    defer { manager.callbackDrainGroup.leave() }
+    guard let touches = TouchFrame.copy(data: data, count: numFingers) else { return 0 }
+
+    TouchEventDelivery.enqueue {
+        manager.processTouches(touches, timestamp: timestamp, generation: generation)
     }
 
     return 0
@@ -53,11 +57,23 @@ class MultitouchManager: ObservableObject {
 
     @Published private(set) var isRunning = false
     @Published private(set) var magicMouseConnected = false
+    @Published private(set) var connectedDeviceInfo: DeviceInfo?
 
     // MARK: - Private Properties
 
+    // 专用队列序列化所有状态访问
+    fileprivate let stateQueue = DispatchQueue(label: "com.magictouch.manager.state")
+
+    // Session state is only accessed on stateQueue.
+    fileprivate var session = MonitoringSession()
+    fileprivate let callbackDrainGroup = DispatchGroup()
+
     private var devices: [UnsafeMutableRawPointer] = []
     private var pendingRestartWorkItem: DispatchWorkItem?
+    private var pendingRetryWorkItem: DispatchWorkItem?
+    private var restartGeneration: UInt64 = 0
+    private var gestureGate = TouchGestureGate()
+    private var deviceMonitor: DeviceConnectionMonitor?
     private var tapDetector = TapDetector(
         tapTimeThreshold: TouchConfiguration.tapTimeThreshold,
         tapMovementThreshold: TouchConfiguration.tapMovementThreshold
@@ -67,8 +83,10 @@ class MultitouchManager: ObservableObject {
     private var touchStartPosition: MTPoint?
     private var lastScrollLikeTime: TimeInterval = 0
     private var currentTouchStartTimestamp: TimeInterval?
+    private var suppressClickSimulationUntilUptime: TimeInterval = 0
 
     // Settings
+    private var isSuspended = false
     private var isEnabled = true
     private var clickMode: ClickMode = .leftRight // left side = left, right side = right
 
@@ -76,13 +94,33 @@ class MultitouchManager: ObservableObject {
 
     init() {
         globalManagerInstance = self
+        deviceMonitor = DeviceConnectionMonitor { [weak self] in
+            guard let self else { return }
+            self.restart(reason: "deviceConnectionChanged", initialDelay: 0.2)
+        }
     }
 
     // MARK: - Public Methods
 
     /// Start monitoring Magic Mouse devices
     func start() {
-        guard !isRunning else { return }
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.start() }
+            return
+        }
+
+        guard isEnabled, !isSuspended, ClickSimulator.hasAccessibilityPermission() else { return }
+
+        // 使用队列检查状态
+        let canStart = stateQueue.sync { () -> Bool in
+            guard !session.isRunning else { return false }
+            return true
+        }
+
+        guard canStart else { return }
+
+        // 确保全局引用存在
+        globalManagerInstance = self
 
         // Discover multitouch devices
         guard let deviceListUnmanaged = MTDeviceCreateList() else {
@@ -94,6 +132,8 @@ class MultitouchManager: ObservableObject {
         let count = CFArrayGetCount(deviceList)
         NSLog("MagicTouch: 📱 Found %ld multitouch device(s)", count)
         devices.removeAll()
+
+        var discoveredDeviceInfo: DeviceInfo?
 
         for i in 0..<count {
             if let devicePtr = CFArrayGetValueAtIndex(deviceList, i) {
@@ -115,7 +155,14 @@ class MultitouchManager: ObservableObject {
                 if !isBuiltIn {
                     if let info = deviceInfo, info.isMagicMouse {
                         NSLog("MagicTouch: ✅ Found Magic Mouse: %@", info.productName ?? "Unknown")
-                        devices.append(mutableDevicePtr)
+                        // CFArray 的生命周期只在本函数作用域内；如果不 retain，后续 stop() 会拿到悬空指针并崩溃。
+                        let retainedDevice = Unmanaged<AnyObject>.fromOpaque(mutableDevicePtr).retain().toOpaque()
+                        devices.append(retainedDevice)
+
+                        // Save device info (only store the first device)
+                        if discoveredDeviceInfo == nil {
+                            discoveredDeviceInfo = info
+                        }
 
                         // Register callback
                         MTRegisterContactFrameCallback(mutableDevicePtr, multitouchCallback)
@@ -130,78 +177,120 @@ class MultitouchManager: ObservableObject {
             }
         }
 
-        isRunning = !devices.isEmpty
-        magicMouseConnected = !devices.isEmpty
+        let hasDevices = !devices.isEmpty
+
+        // 更新内部状态（在队列中）
+        stateQueue.sync {
+            if hasDevices { session.begin() }
+        }
+
+        // 更新 Published 属性（在主线程）
+        isRunning = hasDevices
+        magicMouseConnected = hasDevices
+        connectedDeviceInfo = discoveredDeviceInfo
 
         NSLog("MagicTouch: MultitouchManager started with %ld device(s)", devices.count)
     }
 
     /// Stop then start again (coalesced), useful after sleep/wake or device reconnect.
     func restart(reason: String, initialDelay: TimeInterval = 1.0, retryDelay: TimeInterval = 2.0) {
-        pendingRestartWorkItem?.cancel()
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.restart(reason: reason, initialDelay: initialDelay, retryDelay: retryDelay) }
+            return
+        }
 
+        // Prevent the "enable toggle clicks itself back off" race:
+        // when restart is triggered by UI, ignore taps briefly around the restart window.
+        if reason == "settingsToggleEnabled" || reason == "menuToggleEnabled" {
+            let now = ProcessInfo.processInfo.systemUptime
+            suppressClickSimulationUntilUptime = max(suppressClickSimulationUntilUptime, now + initialDelay + 0.05)
+            NSLog("MagicTouch: Temporarily suppressing click simulation for %.0fms (%@)",
+                  (suppressClickSimulationUntilUptime - now) * 1000.0, reason)
+        }
+
+        cancelPendingRestart()
+        guard isEnabled, !isSuspended, ClickSimulator.hasAccessibilityPermission() else { return }
+        let request = restartGeneration
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            NSLog("MagicTouch: 🔄 Restart requested (%@)", reason)
-
-            self.stop()
+            guard let self, self.restartGeneration == request,
+                  self.isEnabled, !self.isSuspended, ClickSimulator.hasAccessibilityPermission() else { return }
+            self.stopMonitoring()
             self.start()
 
             if !self.isRunning {
-                DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay) { [weak self] in
-                    guard let self else { return }
-                    if !self.isRunning {
-                        NSLog("MagicTouch: 🔁 Restart retry (%@)", reason)
-                        self.stop()
-                        self.start()
-                    }
+                let retry = DispatchWorkItem { [weak self] in
+                    guard let self, self.restartGeneration == request,
+                          self.isEnabled, !self.isSuspended, ClickSimulator.hasAccessibilityPermission(),
+                          !self.isRunning else { return }
+                    self.start()
                 }
+                self.pendingRetryWorkItem = retry
+                DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay, execute: retry)
             }
         }
-
         pendingRestartWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + initialDelay, execute: workItem)
     }
 
-    /// Stop monitoring
-    func stop() {
-        guard isRunning else { return }
+    func suspend() {
+        isSuspended = true
+        stop()
+    }
 
+    func resume() {
+        isSuspended = false
+        restart(reason: "systemDidWake")
+    }
+
+    private func cancelPendingRestart() {
+        restartGeneration &+= 1
         pendingRestartWorkItem?.cancel()
         pendingRestartWorkItem = nil
+        pendingRetryWorkItem?.cancel()
+        pendingRetryWorkItem = nil
+    }
+
+    /// Stop monitoring, including requests waiting for devices to become available.
+    func stop() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.stop() }
+            return
+        }
+        cancelPendingRestart()
+        stopMonitoring()
+    }
+
+    private func stopMonitoring() {
+        // Invalidate queued touch frames and clicks even when no device was found.
+        stateQueue.sync { session.end() }
+        callbackDrainGroup.wait()
 
         for device in devices {
             MTUnregisterContactFrameCallback(device, multitouchCallback)
             MTDeviceStop(device)
             MTDeviceRelease(device)
         }
-
         devices.removeAll()
-        isRunning = false
-        magicMouseConnected = false
         tapDetector.reset()
+        gestureGate.reset()
         cursorPositionAtTouchStart = nil
         touchStartPosition = nil
         lastScrollLikeTime = 0
         clickSequenceTracker.reset()
         currentTouchStartTimestamp = nil
-
+        isRunning = false
+        magicMouseConnected = false
+        connectedDeviceInfo = nil
         NSLog("MagicTouch: MultitouchManager stopped")
     }
 
     /// Update settings
     func updateSettings(enabled: Bool, clickMode: ClickMode) {
-        let wasEnabled = isEnabled
         self.isEnabled = enabled
         self.clickMode = clickMode
 
-        if wasEnabled && !enabled {
-            lastScrollLikeTime = ProcessInfo.processInfo.systemUptime
-            clickSequenceTracker.requestReset()
-            tapDetector.reset()
-            cursorPositionAtTouchStart = nil
-            touchStartPosition = nil
-            currentTouchStartTimestamp = nil
+        if !enabled {
+            stop()
         }
 
         let clickModeLabel: String = switch clickMode {
@@ -216,8 +305,16 @@ class MultitouchManager: ObservableObject {
 
     // MARK: - Touch Processing
 
-    fileprivate func processTouches(_ touches: [MTTouch], timestamp: Double) {
-        guard isEnabled else { return }
+    fileprivate func processTouches(_ touches: [MTTouch], timestamp: Double, generation: UInt64) {
+        guard isEnabled, stateQueue.sync(execute: { session.accepts(generation) }) else { return }
+        guard gestureGate.accepts(touchCount: touches.count) else {
+            tapDetector.reset()
+            clickSequenceTracker.reset()
+            cursorPositionAtTouchStart = nil
+            touchStartPosition = nil
+            currentTouchStartTimestamp = nil
+            return
+        }
 
         // Check for pending reset
         clickSequenceTracker.checkPendingReset()
@@ -242,7 +339,7 @@ class MultitouchManager: ObservableObject {
                             handleTap(at: tapPosition)
                         }
                     } else {
-                    handleTap(at: tapPosition)
+                        handleTap(at: tapPosition)
                     }
                 } else {
                     NSLog("MagicTouch: [NO-TAP] Gesture did not qualify as tap")
@@ -286,25 +383,25 @@ class MultitouchManager: ObservableObject {
                         lastScrollLikeTime = ProcessInfo.processInfo.systemUptime
                         clickSequenceTracker.requestReset()
                         tapDetector.reset()
+                        gestureGate.cancel()
                         cursorPositionAtTouchStart = nil
                         touchStartPosition = nil
                         currentTouchStartTimestamp = nil
                     }
                 }
             }
-        } else {
-            // Multiple touches - cancel tap detection
-            NSLog("MagicTouch: [CANCEL] Multi-touch detected; cancelling")
-            lastScrollLikeTime = ProcessInfo.processInfo.systemUptime
-            clickSequenceTracker.requestReset()
-            tapDetector.reset()
-            cursorPositionAtTouchStart = nil
-            touchStartPosition = nil
-            currentTouchStartTimestamp = nil
         }
     }
 
     private func handleTap(at position: MTPoint) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now < suppressClickSimulationUntilUptime {
+            NSLog("MagicTouch: [NO-TAP] Suppressed due to recent restart (%.0fms remaining)",
+                  (suppressClickSimulationUntilUptime - now) * 1000.0)
+            clickSequenceTracker.requestReset()
+            return
+        }
+
         // Determine click type based on touch position and mode
         let clickType: MouseClickType = switch clickMode {
         case .leftRight:
@@ -335,13 +432,26 @@ class MultitouchManager: ObservableObject {
         }
 
         // Simulate click immediately (no delay)
-        ClickSimulator.simulateClick(type: clickType, clickState: clickState)
+        let generation = stateQueue.sync { session.generation }
+        ClickSimulator.simulateClick(type: clickType, clickState: clickState) { [weak self] in
+            guard let self else { return false }
+            return self.stateQueue.sync { self.session.accepts(generation) }
+        }
     }
 
     // MARK: - Cleanup
 
     deinit {
-        stop()
+        // 检查是否需要停止
+        let needsStop = stateQueue.sync {
+            return session.isRunning
+        }
+
+        if needsStop {
+            stop()
+        }
+
+        // 确保清除全局引用
         globalManagerInstance = nil
     }
 }

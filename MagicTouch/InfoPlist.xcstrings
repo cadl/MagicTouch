@@ -49,19 +49,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MagicTouch 需要辅助功能权限，以便在您轻点 Magic Mouse 时模拟鼠标点按。"
-          }
-        }
-      }
-    },
-    "NSHumanReadableCopyright" : {
-      "comment" : "Copyright (human-readable)",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : ""
+            "value" : "MagicTouch 需要辅助功能权限，以便在您触摸 Magic Mouse 时模拟鼠标点击。"
           }
         }
       }

@@ -11,6 +11,7 @@ struct StatusIndicator: View {
     let isConnected: Bool
     let connectedText: LocalizedStringKey
     let disconnectedText: LocalizedStringKey
+    var detailText: String? = nil
     var action: (() -> Void)? = nil
 
     var body: some View {
@@ -27,8 +28,16 @@ struct StatusIndicator: View {
                 .controlSize(.small)
                 .font(.callout)
             } else {
-                Text(isConnected ? connectedText : disconnectedText)
+                if let detail = detailText, isConnected {
+                    HStack(spacing: 0) {
+                        Text(connectedText)
+                        Text(" (\(detail))")
+                    }
                     .font(.callout)
+                } else {
+                    Text(isConnected ? connectedText : disconnectedText)
+                        .font(.callout)
+                }
             }
         }
     }

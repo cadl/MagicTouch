@@ -19,6 +19,15 @@ class LaunchAtLoginManager {
 
     // MARK: - Public Methods
 
+    /// Check if the app is in the /Applications folder
+    /// Launch at login requires the app to be in a standard location
+    func isAppInApplicationsFolder() -> Bool {
+        let bundlePath = Bundle.main.bundlePath
+        let isInApplications = bundlePath.hasPrefix("/Applications")
+        Logger.info("App bundle path: \(bundlePath), in Applications: \(isInApplications)", category: Logger.settings)
+        return isInApplications
+    }
+
     /// Set launch at login status
     /// Returns true if successful, false otherwise
     @discardableResult
@@ -30,7 +39,7 @@ class LaunchAtLoginManager {
                     if SMAppService.mainApp.status == .notRegistered {
                         try SMAppService.mainApp.register()
                         Logger.info("✓ Launch at login enabled successfully", category: Logger.settings)
-                        return true
+                        return SMAppService.mainApp.status == .enabled
                     } else if SMAppService.mainApp.status == .enabled {
                         Logger.info("Launch at login already enabled", category: Logger.settings)
                         return true
@@ -46,7 +55,7 @@ class LaunchAtLoginManager {
                         return false
                     }
                 } else {
-                    if SMAppService.mainApp.status == .enabled {
+                    if SMAppService.mainApp.status != .notRegistered {
                         try SMAppService.mainApp.unregister()
                         Logger.info("✓ Launch at login disabled successfully", category: Logger.settings)
                         return true
