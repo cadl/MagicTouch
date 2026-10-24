@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var settings = SettingsManager.shared
     @ObservedObject private var multitouchManager = MultitouchManager.shared
     @StateObject private var permissionManager = PermissionManager.shared
+    @ObservedObject private var updater = UpdateManager.shared
     @State private var showLaunchAtLoginAlert = false
     @State private var showMoveToApplicationsAlert = false
     @State private var showRestartAlert = false
@@ -62,6 +63,29 @@ struct ContentView: View {
                         ))
                             .toggleStyle(.switch)
                             .labelsHidden()
+                    }
+                }
+
+                SettingsSection(title: String(localized: "updates.title")) {
+                    SettingsRow {
+                        Toggle(String(localized: "updates.automatic"), isOn: Binding(
+                            get: { updater.automaticallyChecksForUpdates },
+                            set: { updater.setAutomaticallyChecksForUpdates($0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .disabled(!updater.isAvailable)
+                    }
+                    SettingsRow {
+                        if !updater.isAvailable {
+                            Text(String(localized: "updates.unavailable"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(String(localized: "updates.check")) {
+                            updater.checkForUpdates()
+                        }
+                        .disabled(!updater.canCheckForUpdates)
                     }
                 }
 

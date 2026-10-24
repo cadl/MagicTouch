@@ -60,6 +60,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         multitouchManager.updateSettings(enabled: settings.isEnabled, clickMode: settings.clickMode)
 
+        UpdateManager.shared.start()
+
         // Setup menu bar
         menuBarController = MenuBarController(
             settings: settings,

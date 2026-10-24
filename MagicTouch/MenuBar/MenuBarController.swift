@@ -9,11 +9,13 @@ import Cocoa
 import SwiftUI
 import Combine
 
-class MenuBarController {
+class MenuBarController: NSObject {
 
     // MARK: - Properties
 
     private var statusItem: NSStatusItem?
+    private var updateSubscription: AnyCancellable?
+    private let updater = UpdateManager.shared
     private var menuUpdates: AnyCancellable?
     private var settings: SettingsManager
     private var multitouchManager: MultitouchManager
@@ -28,6 +30,7 @@ class MenuBarController {
         self.settings = settings
         self.multitouchManager = multitouchManager
         self.permissionManager = permissionManager
+        super.init()
     }
 
     // MARK: - Public Methods
@@ -52,6 +55,9 @@ class MenuBarController {
         )
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in self?.updateMenu() }
+        updateSubscription = updater.$canCheckForUpdates
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateMenu() }
         updateMenu()
     }
 
@@ -111,6 +117,14 @@ class MenuBarController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let updateItem = NSMenuItem(
+            title: String(localized: "updates.check"),
+            action: #selector(checkForUpdates), keyEquivalent: ""
+        )
+        updateItem.target = self
+        menu.addItem(updateItem)
+        menu.addItem(NSMenuItem.separator())
+
         // Quit
         let quitItem = NSMenuItem(title: String(localized: "menu.quit"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
@@ -141,7 +155,20 @@ class MenuBarController {
         onShowSettings?()
     }
 
+    @objc private func checkForUpdates() {
+        updater.checkForUpdates()
+    }
+
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+}
+
+extension MenuBarController: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(checkForUpdates) {
+            return updater.canCheckForUpdates
+        }
+        return true
     }
 }

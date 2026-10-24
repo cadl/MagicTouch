@@ -28,5 +28,13 @@
 	<true/>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>MagicTouch needs accessibility permission to simulate mouse clicks when you tap on the Magic Mouse.</string>
+	<key>SUFeedURL</key>
+	<string>$(SPARKLE_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<false/>
 </dict>
 </plist>

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		8BC3B2432F1601B400B416A5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = MagicTouch;
 			packageProductDependencies = (
+				A10000000000000000000002 /* Sparkle */,
 			);
 			productName = MagicTouch;
 			productReference = 8BC3B2352F1601B300B416A5 /* MagicTouch.app */;
@@ -200,6 +206,9 @@
 			);
 			mainGroup = 8BC3B22C2F1601B300B416A5;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A10000000000000000000003 /* Sparkle */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8BC3B2362F1601B300B416A5 /* Products */;
 			projectDirPath = "";
@@ -272,6 +281,22 @@
 			targetProxy = 8BC3B24D2F1601B400B416A5 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000003 /* Sparkle */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = { kind = upToNextMajorVersion; minimumVersion = 2.10.0; };
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A10000000000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000003 /* Sparkle */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8BC3B2542F1601B400B416A5 /* Debug */ = {
