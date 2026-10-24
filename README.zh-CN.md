@@ -8,7 +8,7 @@ A macOS menu bar app that brings tap-to-click to Apple Magic Mouse.
 
 <p align="center">
   <a href="docs/images/settings-en.png">
-    <img src="docs/images/macbook-preview.png" width="960" alt="MacBook 展示框中的 MagicTouch 英文界面，搭配 macOS Mojave 壁纸、菜单栏和 Dock">
+    <img src="docs/images/screen-preview.png" width="960" alt="白色背景屏幕展示框中的 MagicTouch 英文界面，搭配 macOS Mojave 壁纸、菜单栏和 Dock">
   </a>
 </p>
 
