@@ -107,7 +107,10 @@ class ClickSimulator {
             if shouldUseAccessibilityClick && type == .left {
                 // AXPress is only a left-button action. If the hit element cannot
                 // be pressed (e.g. outside the menu), send a normal click instead.
-                if performAccessibilityClick(at: position) { return }
+                if performAccessibilityClick(at: position) {
+                    showFeedback(at: position)
+                    return
+                }
                 guard shouldPost() else { return }
             }
 
@@ -135,6 +138,7 @@ class ClickSimulator {
 
             // Post events to the system
             mouseDown.post(tap: .cghidEventTap)
+            showFeedback(at: position)
 
             // Delay between down and up (30-50ms for more reliable recognition)
             // Some apps need longer delays to properly recognize clicks
@@ -151,6 +155,12 @@ class ClickSimulator {
             }
             NSLog("ClickSimulator: Posted %@ click (state=%lld) at (%.0f, %.0f)",
                   typeLabel, clickState, position.x, position.y)
+        }
+    }
+
+    private static func showFeedback(at position: CGPoint) {
+        TouchEventDelivery.enqueue {
+            ClickFeedbackController.shared.show(at: position)
         }
     }
 

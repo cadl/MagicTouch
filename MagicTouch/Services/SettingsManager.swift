@@ -18,6 +18,13 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    @Published var clickFeedbackStyle: ClickFeedbackStyle {
+        didSet {
+            UserDefaults.standard.set(clickFeedbackStyle.rawValue, forKey: Keys.clickFeedbackStyle)
+            ClickFeedbackController.shared.hide()
+        }
+    }
+
     @Published var clickMode: ClickMode {
         didSet {
             UserDefaults.standard.set(clickMode == .leftRight, forKey: Keys.clickMode)
@@ -42,6 +49,7 @@ class SettingsManager: ObservableObject {
     private enum Keys {
         static let isEnabled = "isEnabled"
         static let clickMode = "clickMode"
+        static let clickFeedbackStyle = "clickFeedbackStyle"
         static let launchAtLogin = "launchAtLogin"
         static let selectedLanguage = "selectedLanguage"
     }
@@ -64,6 +72,8 @@ class SettingsManager: ObservableObject {
         self.isEnabled = UserDefaults.standard.object(forKey: Keys.isEnabled) as? Bool ?? Defaults.isEnabled
         let isLeftRight = UserDefaults.standard.object(forKey: Keys.clickMode) as? Bool ?? true
         self.clickMode = isLeftRight ? .leftRight : .leftOnly
+        self.clickFeedbackStyle = UserDefaults.standard.string(forKey: Keys.clickFeedbackStyle)
+            .flatMap(ClickFeedbackStyle.init(rawValue:)) ?? .off
         self.launchAtLogin = LaunchAtLoginManager.shared.isEnabled()
 
         // Load language preference
@@ -84,6 +94,7 @@ class SettingsManager: ObservableObject {
     func resetToDefaults() {
         isEnabled = Defaults.isEnabled
         clickMode = Defaults.clickMode
+        clickFeedbackStyle = .off
         launchAtLogin = Defaults.launchAtLogin
         selectedLanguage = Defaults.selectedLanguage
     }

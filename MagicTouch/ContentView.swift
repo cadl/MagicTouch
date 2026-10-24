@@ -107,6 +107,25 @@ struct ContentView: View {
                             updateMultitouchSettings()
                         }
                     }
+                    Divider()
+                        .padding(.horizontal, -12)
+
+                    SettingsRow {
+                        Text(String(localized: "feedback.label"))
+                        Spacer()
+                        Picker(String(localized: "feedback.label"), selection: $settings.clickFeedbackStyle) {
+                            ForEach(ClickFeedbackStyle.allCases) { style in
+                                Text(style.displayName).tag(style)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 140)
+                        Button(String(localized: "feedback.preview")) {
+                            ClickFeedbackController.shared.preview()
+                        }
+                        .disabled(settings.clickFeedbackStyle == .off)
+                    }
                 }
 
                 SettingsSection(title: String(localized: "section.languageStatus")) {

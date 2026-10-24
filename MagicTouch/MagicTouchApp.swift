@@ -171,7 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             // Otherwise, find and show settings window
-            let windows = NSApp.windows.filter { !$0.isSheet }
+            let windows = NSApp.windows.filter { !$0.isSheet && !($0 is NSPanel) }
             if let window = windows.first {
                 self.settingsWindow = window
                 window.delegate = self
@@ -182,7 +182,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Capture settings window reference
     private func captureSettingsWindow() {
-        let windows = NSApp.windows.filter { !$0.isSheet }
+        let windows = NSApp.windows.filter { !$0.isSheet && !($0 is NSPanel) }
         if let window = windows.first {
             settingsWindow = window
             window.delegate = self
