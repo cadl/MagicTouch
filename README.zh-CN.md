@@ -7,7 +7,9 @@
 A macOS menu bar app that brings tap-to-click to Apple Magic Mouse.
 
 <p align="center">
-  <img src="docs/images/settings-en.png" width="520" alt="MagicTouch 完整设置窗口：启用与开机启动、软件更新、左右键模式、点击反馈、语言及设备和权限状态">
+  <a href="docs/images/settings-en.png">
+    <img src="docs/images/macbook-preview.png" width="960" alt="MacBook 展示框中的 MagicTouch 英文设置界面">
+  </a>
 </p>
 
 ## 功能

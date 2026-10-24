@@ -7,7 +7,9 @@ Tap to click on your Magic Mouse, without pressing down.
 MagicTouch is a macOS menu bar app that turns light taps on an Apple Magic Mouse into mouse clicks.
 
 <p align="center">
-  <img src="docs/images/settings-en.png" width="520" alt="MagicTouch settings window showing general settings, software updates, click mode, visual feedback, language, device connection, and permission status">
+  <a href="docs/images/settings-en.png">
+    <img src="docs/images/macbook-preview.png" width="960" alt="MagicTouch running inside a MacBook-style presentation frame">
+  </a>
 </p>
 
 ## Features
