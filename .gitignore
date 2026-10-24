@@ -69,3 +69,7 @@ buildServer.json
 *.key
 *.pem
 *.mobileprovision
+
+# Release tooling Python caches
+__pycache__/
+*.py[cod]

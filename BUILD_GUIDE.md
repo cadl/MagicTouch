@@ -37,13 +37,15 @@ does not anonymize the application signature.
 The release process must archive the Release configuration, export with Developer
 ID signing, notarize with Apple, staple the ticket, verify the final artifact, and
 package it for distribution. Signing alone does not complete notarization.
-Use Xcode's archive/distribution workflow or automate the equivalent steps in CI.
-There is currently no automated DMG, notarization, or GitHub Release workflow in
-this repository.
+The [release workflow](docs/RELEASE.md) delegates signing and notarization to
+Xcode Cloud, then packages the notarized app into an unsigned DMG and uploads it
+to a draft GitHub Release. Complete the one-time Apple/GitHub setup before use.
+You can also use Xcode's archive/distribution workflow locally.
 
 Keep certificates with private keys, certificate passwords, Apple credentials,
-and Sparkle private keys outside Git. For CI, use GitHub Actions Secrets and a
-temporary keychain. Supply the team and signing identity through build settings.
+and Sparkle private keys outside Git. The current pipeline does not import Apple
+signing certificates into GitHub; only its App Store Connect API key is stored
+in GitHub Actions Secrets. Supply the team through the documented cloud settings.
 Do not expose release credentials to untrusted pull requests.
 
 See [docs/UPDATES.md](docs/UPDATES.md) for Sparkle release requirements, and

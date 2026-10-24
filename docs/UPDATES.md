@@ -17,7 +17,7 @@
 4. 递增 `CURRENT_PROJECT_VERSION`（Sparkle 据此比较版本），设置 `MARKETING_VERSION`，保持正式版 Bundle ID 和签名身份稳定。
 5. 使用 Developer ID 签名并公证。Sparkle 官方建议 `xcodebuild archive` 后使用 `xcodebuild -exportArchive` 的 Developer ID 导出流程，确保嵌套的 Sparkle helper 正确签名。随后完成 Apple 公证、staple 和 Gatekeeper 验证。
 
-**仓库目前没有自动化的打包、公证和上传流程。** 使用 Xcode 归档和分发，或在发布基础设施确定后配置 CI。构建与签名说明见 [BUILD_GUIDE.md](../BUILD_GUIDE.md)。
+仓库提供 [Xcode Cloud → GitHub DMG 流水线](RELEASE.md)：Apple 完成 App 签名公证，GitHub 制作未签名的外层 DMG 并上传草稿 Release。使用前需完成后台配置。该流水线不生成或发布 Sparkle appcast；以下更新签名和发布步骤仍需单独完成。
 
 ## 每次发布
 
